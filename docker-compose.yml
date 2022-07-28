@@ -73,9 +73,9 @@ services:
     image: wavefronthq/proxy:latest
     restart: always
     environment:
-      - WAVEFRONT_URL=${WAVEFRONT_URI}
-      - WAVEFRONT_TOKEN=${WAVEFRONT_TOKEN}
-              - WAVEFRONT_PROXY_ARGS='--otlpGrpcListenerPorts 4317 –otlpHttpListenerPorts 4318 --customTracingListenerPorts 30001 --otlpResourceAttrsOnMetricsIncluded true --pushFlushMaxLogs 150 --customMessageTags log --pushListenerPorts=2878'
+      - WAVEFRONT_TOKEN
+      - WAVEFRONT_URL
+      - WAVEFRONT_PROXY_ARGS='--otlpGrpcListenerPorts 4317 –otlpHttpListenerPorts 4318 --customTracingListenerPorts 30001 --otlpResourceAttrsOnMetricsIncluded true --pushFlushMaxLogs 150 --customMessageTags log --pushListenerPorts 2878'
       - JAVA_HEAP_USAGE=1650m
     ports:
       - 2878:2878
