@@ -6,12 +6,17 @@ receivers:
 
 exporters:
   jaeger:
-    endpoint: "jaeger:14250"
+    #    endpoint: "host.docker.internal:30003"
     tls:
       insecure: true
   logging:
   prometheus:
     endpoint: "otelcol:9464"
+  tanzuobservability:
+    traces:
+      endpoint: "http://wavefrontproxy:30001"
+    metrics:
+      endpoint: "http://wavefrontproxy:2878"
 
 
 processors:
@@ -22,8 +27,8 @@ service:
     traces:
       receivers: [otlp]
       processors: [batch]
-      exporters: [logging, jaeger]
+      exporters: [logging, tanzuobservability]
     metrics:
       receivers: [otlp]
       processors: [batch]
-      exporters: [prometheus, logging]
+      exporters: [tanzuobservability, logging]

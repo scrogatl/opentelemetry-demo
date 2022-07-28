@@ -1,9 +1,4 @@
 version: '3.9'
-x-default-logging: &logging
-  driver: "json-file"
-  options:
-    max-size: "5m"
-    max-file: "2"
 services:
 
   # Jaeger
@@ -22,7 +17,6 @@ services:
       - "14269:14269"
     environment:
       - COLLECTOR_ZIPKIN_HOST_PORT
-    logging: *logging
 
   # Collector
   otelcol:
@@ -35,10 +29,10 @@ services:
       - "4317"
       - "4318"
       - "9464"
+      - "30001"
       - "8888:8888"
     depends_on:
-      - jaeger
-    logging: *logging
+      - fluentd
 
   # Redis
   redis-cart:
@@ -46,8 +40,49 @@ services:
     container_name: redis-cart
     ports:
       - "${REDIS_PORT}"
-    logging: *logging
+    depends_on:
+      - fluentd
+    environment:
+      - OTEL_RESOURCE_ATTRIBUTES=service.name=redis,application=${APPLICATION}
+    logging:
+        driver: "fluentd"
+        options:
+          fluentd-address: localhost:24224
+          tag: service.redis.${APPLICATION}
 
+  fluentd:
+    container_name: vmware-log-intelligence
+    image: vmware/log-intelligence-fluentd
+    restart: always
+    command: fluentd
+    environment:
+      NODE_NAME: log-container
+      FLUENTD_ARGS: --no-supervisor -q -vv
+    volumes:
+      - ./src/config/fluent.conf:/etc/fluent/fluent.conf:ro
+    ports:
+      - 24224:24224
+      - 24224:24224/udp
+    depends_on:
+      - wavefrontproxy
+    links:
+      - wavefrontproxy
+
+  wavefrontproxy:
+    container_name: wavefrontproxy
+    image: wavefronthq/proxy:latest
+    restart: always
+    environment:
+      - WAVEFRONT_URL=${WAVEFRONT_URI}
+      - WAVEFRONT_TOKEN=${WAVEFRONT_TOKEN}
+      - WAVEFRONT_PROXY_ARGS='--otlpGrpcListenerPorts 4317 –otlpHttpListenerPorts 4318 --customTracingListenerPorts 30001 --otlpResourceAttrsOnMetricsIncluded true --pushFlushMaxLogs 150 --customMessageTags log --pushListenerPorts=2878'
+      - JAVA_HEAP_USAGE=1650m
+    ports:
+      - 2878:2878
+      - 4317:4317
+      - 4318:4318
+      - 30001:30001
+        
   # AdService
   adservice:
     image: ${IMAGE_NAME}:${IMAGE_VERSION}-adservice
@@ -60,10 +95,17 @@ services:
     environment:
       - AD_SERVICE_PORT
       - OTEL_EXPORTER_OTLP_TRACES_ENDPOINT
-      - OTEL_RESOURCE_ATTRIBUTES=service.name=adservice
+      - OTEL_RESOURCE_ATTRIBUTES=service.name=adservice,application=${APPLICATION}
     depends_on:
       - otelcol
-    logging: *logging
+      - fluentd
+    links:
+      - fluentd
+    logging:
+        driver: "fluentd"
+        options:
+          fluentd-address: localhost:24224
+          tag: service.adservice.${APPLICATION}
 
   # CartService
   cartservice:
@@ -78,12 +120,18 @@ services:
       - CART_SERVICE_PORT
       - REDIS_ADDR
       - OTEL_EXPORTER_OTLP_ENDPOINT
-      - OTEL_RESOURCE_ATTRIBUTES=service.name=cartservice
+      - OTEL_RESOURCE_ATTRIBUTES=service.name=cartservice,application=${APPLICATION}
       - ASPNETCORE_URLS=http://*:${CART_SERVICE_PORT}
     depends_on:
       - redis-cart
       - otelcol
-    logging: *logging
+    links:
+      - fluentd
+    logging:
+        driver: "fluentd"
+        options:
+          fluentd-address: localhost:24224
+          tag: service.cartservice.${APPLICATION}
 
   # CheckoutService
   checkoutservice:
@@ -103,8 +151,9 @@ services:
       - PRODUCT_CATALOG_SERVICE_ADDR
       - SHIPPING_SERVICE_ADDR
       - OTEL_EXPORTER_OTLP_TRACES_ENDPOINT
-      - OTEL_RESOURCE_ATTRIBUTES=service.name=checkoutservice
+      - OTEL_RESOURCE_ATTRIBUTES=service.name=checkout,application=${APPLICATION}
     depends_on:
+      - fluentd
       - cartservice
       - currencyservice
       - emailservice
@@ -112,7 +161,13 @@ services:
       - productcatalogservice
       - shippingservice
       - otelcol
-    logging: *logging
+    links:
+      - fluentd
+    logging:
+        driver: "fluentd"
+        options:
+          fluentd-address: localhost:24224
+          tag: service.checkout.${APPLICATION}
 
   # CurrencyService
   currencyservice:
@@ -128,10 +183,15 @@ services:
     environment:
       - PORT=${CURRENCY_SERVICE_PORT}
       - OTEL_EXPORTER_OTLP_TRACES_ENDPOINT
-      - OTEL_RESOURCE_ATTRIBUTES=service.name=currencyservice
+      - OTEL_RESOURCE_ATTRIBUTES=service.name=currency,application=${APPLICATION}
     depends_on:
       - otelcol
-    logging: *logging
+      - fluentd
+    logging:
+        driver: "fluentd"
+        options:
+          fluentd-address: localhost:24224
+          tag: service.currency.${APPLICATION}
 
   # EmailService
   emailservice:
@@ -145,10 +205,16 @@ services:
       - APP_ENV=production
       - PORT=${EMAIL_SERVICE_PORT}
       - OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=http://otelcol:4318/v1/traces
-      - OTEL_RESOURCE_ATTRIBUTES=service.name=emailservice
+      - OTEL_RESOURCE_ATTRIBUTES=service.name=email,application=${APPLICATION}
     depends_on:
       - otelcol
-    logging: *logging
+    links:
+      - fluentd
+    logging:
+        driver: "fluentd"
+        options:
+          fluentd-address: localhost:24224
+          tag: service.email.${APPLICATION}
 
   # Frontend
   frontend:
@@ -169,7 +235,7 @@ services:
       - RECOMMENDATION_SERVICE_ADDR
       - SHIPPING_SERVICE_ADDR
       - OTEL_EXPORTER_OTLP_TRACES_ENDPOINT
-      - OTEL_RESOURCE_ATTRIBUTES=service.name=frontend
+      - OTEL_RESOURCE_ATTRIBUTES=service.name=frontend,application=${APPLICATION}
       - OTEL_EXPORTER_OTLP_ENDPOINT
     depends_on:
       - adservice
@@ -180,7 +246,15 @@ services:
       - productcatalogservice
       - recommendationservice
       - shippingservice
-    logging: *logging
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    links:
+      - fluentd
+    logging:
+        driver: "fluentd"
+        options:
+          fluentd-address: localhost:24224
+          tag: service.frontend.${APPLICATION}
 
   # PaymentService
   paymentservice:
@@ -190,14 +264,20 @@ services:
       context: ./
       dockerfile: ./src/paymentservice/Dockerfile
     ports:
-      - "${PAYMENT_SERVICE_PORT}:${PAYMENT_SERVICE_PORT}"
+      - "${PAYMENT_SERVICE_PORT}"
     environment:
       - PAYMENT_SERVICE_PORT
       - OTEL_EXPORTER_OTLP_TRACES_ENDPOINT
-      - OTEL_RESOURCE_ATTRIBUTES=service.name=paymentservice
+      - OTEL_RESOURCE_ATTRIBUTES=service.name=payment,application=${APPLICATION}
     depends_on:
       - otelcol
-    logging: *logging
+    links:
+      - fluentd
+    logging:
+        driver: "fluentd"
+        options:
+          fluentd-address: localhost:24224
+          tag: service.payment.${APPLICATION}
 
   # ProductCatalogService
   productcatalogservice:
@@ -211,10 +291,16 @@ services:
     environment:
       - PRODUCT_CATALOG_SERVICE_PORT
       - OTEL_EXPORTER_OTLP_TRACES_ENDPOINT
-      - OTEL_RESOURCE_ATTRIBUTES=service.name=productcatalogservice
+      - OTEL_RESOURCE_ATTRIBUTES=service.name=productcatalog,application=${APPLICATION}
     depends_on:
       - otelcol
-    logging: *logging
+    links:
+      - fluentd
+    logging:
+        driver: "fluentd"
+        options:
+          fluentd-address: localhost:24224
+          tag: service.productcatalog.${APPLICATION}
 
   # RecommendationService
   recommendationservice:
@@ -224,7 +310,7 @@ services:
       context: ./
       dockerfile: ./src/recommendationservice/Dockerfile
     ports:
-      - "${RECOMMENDATION_SERVICE_PORT}:${RECOMMENDATION_SERVICE_PORT}"
+      - "${RECOMMENDATION_SERVICE_PORT}"
     depends_on:
       - productcatalogservice
       - otelcol
@@ -233,8 +319,14 @@ services:
       - PRODUCT_CATALOG_SERVICE_ADDR
       - OTEL_PYTHON_LOG_CORRELATION=true
       - OTEL_EXPORTER_OTLP_TRACES_ENDPOINT
-      - OTEL_RESOURCE_ATTRIBUTES=service.name=recommendationservice
-    logging: *logging
+      - OTEL_RESOURCE_ATTRIBUTES=service.name=recommendation,application=${APPLICATION}
+    links:
+      - fluentd
+    logging:
+      driver: "fluentd"
+      options:
+          fluentd-address: localhost:24224
+          tag: service.recommendation.${APPLICATION}
 
   # ShippingService
   shippingservice:
@@ -248,17 +340,22 @@ services:
     environment:
       - PORT=${SHIPPING_SERVICE_PORT}
       - OTEL_EXPORTER_OTLP_TRACES_ENDPOINT
-      - OTEL_RESOURCE_ATTRIBUTES=service.name=shippingservice
+      - OTEL_RESOURCE_ATTRIBUTES=service.name=shipping,application=${APPLICATION}
     depends_on:
       - otelcol
-    logging: *logging
+      - fluentd
+    logging:
+        driver: "fluentd"
+        options:
+          fluentd-address: localhost:24224
+          tag: service.shipping.${APPLICATION}
 
   # FeatureFlagService
   featureflagservice:
     image: ${IMAGE_NAME}:${IMAGE_VERSION}-featureflagservice
     container_name: feature-flag-service
-    build:
-      context: ./src/featureflagservice
+      #    build:
+      #context: ./src/featureflagservice
     ports:
       - "${FEATURE_FLAG_SERVICE_PORT}:${FEATURE_FLAG_SERVICE_PORT}"
       - "${FEATURE_FLAG_GRPC_SERVICE_PORT}"
@@ -266,12 +363,17 @@ services:
       - PORT=${FEATURE_FLAG_SERVICE_PORT}
       - GRPC_PORT=${FEATURE_FLAG_GRPC_SERVICE_PORT}
       - OTEL_EXPORTER_OTLP_TRACES_ENDPOINT
-      - OTEL_RESOURCE_ATTRIBUTES=service.name=featureflagservice
+      - OTEL_RESOURCE_ATTRIBUTES=service.name=featureflag,application=${APPLICATION}
       - DATABASE_URL=ecto://ffs:ffs@ffs_postgres:5432/ffs
     depends_on:
       - ffs_postgres
-    logging: *logging
-
+      - fluentd
+    logging:
+        driver: "fluentd"
+        options:
+          fluentd-address: localhost:24224
+          tag: service.featureflag.${APPLICATION}
+  
   ffs_postgres:
     image: cimg/postgres:14.2
     container_name: postgres
@@ -279,7 +381,13 @@ services:
       - POSTGRES_USER=ffs
       - POSTGRES_DB=ffs
       - POSTGRES_PASSWORD=ffs
-    logging: *logging
+    links:
+      - fluentd
+    logging:
+        driver: "fluentd"
+        options:
+          fluentd-address: localhost:24224
+          tag: service.postgres.${APPLICATION}
 
   # LoadGenerator
   loadgenerator:
@@ -292,11 +400,16 @@ services:
       - FRONTEND_ADDR
       - USERS
       - OTEL_EXPORTER_OTLP_TRACES_ENDPOINT
-      - OTEL_RESOURCE_ATTRIBUTES=service.name=loadgenerator
+      - OTEL_RESOURCE_ATTRIBUTES=service.name=loadgenerator,application=${APPLICATION}
       - PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION=python
     depends_on:
+      - fluentd
       - frontend
-    logging: *logging
+    logging:
+        driver: "fluentd"
+        options:
+          fluentd-address: localhost:24224
+          tag: service.loadgenerator.${APPLICATION}
 
   # Prometheus
   prometheus:
@@ -314,7 +427,6 @@ services:
       - ./src/prometheus/prometheus-config.yaml:/etc/prometheus/prometheus-config.yaml
     ports:
       - "${PROMETHEUS_SERVICE_PORT}:${PROMETHEUS_SERVICE_PORT}"
-    logging: *logging
 
   # Grafana
   grafana:
@@ -325,4 +437,3 @@ services:
       - ./src/grafana/provisioning/:/etc/grafana/provisioning/
     ports:
       - "${GRAFANA_SERVICE_PORT}:${GRAFANA_SERVICE_PORT}"
-    logging: *logging
