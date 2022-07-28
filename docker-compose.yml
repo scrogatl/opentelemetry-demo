@@ -20,7 +20,7 @@ services:
 
   # Collector
   otelcol:
-    image: otel/opentelemetry-collector:0.56.0
+    image: otel/opentelemetry-collector-contrib:0.56.0
     container_name: otel-col
     command: [ "--config=/etc/otelcol-config.yml" ]
     volumes:
@@ -59,7 +59,7 @@ services:
       NODE_NAME: log-container
       FLUENTD_ARGS: --no-supervisor -q -vv
     volumes:
-      - ./src/config/fluent.conf:/etc/fluent/fluent.conf:ro
+      - ./src/fluentd/config/fluent.conf:/etc/fluent/fluent.conf:ro
     ports:
       - 24224:24224
       - 24224:24224/udp
@@ -75,12 +75,10 @@ services:
     environment:
       - WAVEFRONT_URL=${WAVEFRONT_URI}
       - WAVEFRONT_TOKEN=${WAVEFRONT_TOKEN}
-      - WAVEFRONT_PROXY_ARGS='--otlpGrpcListenerPorts 4317 –otlpHttpListenerPorts 4318 --customTracingListenerPorts 30001 --otlpResourceAttrsOnMetricsIncluded true --pushFlushMaxLogs 150 --customMessageTags log --pushListenerPorts=2878'
+              - WAVEFRONT_PROXY_ARGS='--otlpGrpcListenerPorts 4317 –otlpHttpListenerPorts 4318 --customTracingListenerPorts 30001 --otlpResourceAttrsOnMetricsIncluded true --pushFlushMaxLogs 150 --customMessageTags log --pushListenerPorts=2878'
       - JAVA_HEAP_USAGE=1650m
     ports:
       - 2878:2878
-      - 4317:4317
-      - 4318:4318
       - 30001:30001
         
   # AdService
