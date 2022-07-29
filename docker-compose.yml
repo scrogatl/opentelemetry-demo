@@ -1,6 +1,20 @@
 version: '3.9'
 services:
 
+  wavefrontproxy:
+    container_name: wavefrontproxy
+    image: wavefronthq/proxy:latest
+    restart: always
+    environment:
+      - WAVEFRONT_TOKEN=${WAVEFRONT_TKN}
+      - WAVEFRONT_URL
+      - WAVEFRONT_PROXY_ARGS
+      - JAVA_HEAP_USAGE=1650m
+    ports:
+      - 2878:2878
+      - 30001:30001
+    mem_limit: 2g
+
   # Jaeger
   jaeger:
     image: jaegertracing/all-in-one
@@ -22,6 +36,7 @@ services:
   otelcol:
     image: otel/opentelemetry-collector-contrib:0.56.0
     container_name: otel-col
+    restart: on-failure
     command: [ "--config=/etc/otelcol-config.yml" ]
     volumes:
       - ./src/otelcollector/otelcol-config.yml:/etc/otelcol-config.yml
@@ -32,7 +47,7 @@ services:
       - "30001"
       - "8888:8888"
     depends_on:
-      - fluentd
+      - wavefrontproxy
 
   # Redis
   redis-cart:
@@ -67,19 +82,6 @@ services:
       - wavefrontproxy
     links:
       - wavefrontproxy
-
-  wavefrontproxy:
-    container_name: wavefrontproxy
-    image: wavefronthq/proxy:latest
-    restart: always
-    environment:
-      - WAVEFRONT_TOKEN
-      - WAVEFRONT_URL
-      - WAVEFRONT_PROXY_ARGS='--otlpGrpcListenerPorts 4317 –otlpHttpListenerPorts 4318 --customTracingListenerPorts 30001 --otlpResourceAttrsOnMetricsIncluded true --pushFlushMaxLogs 150 --customMessageTags log --pushListenerPorts 2878'
-      - JAVA_HEAP_USAGE=1650m
-    ports:
-      - 2878:2878
-      - 30001:30001
         
   # AdService
   adservice:
