@@ -354,8 +354,8 @@ services:
   featureflagservice:
     image: ${IMAGE_NAME}:${IMAGE_VERSION}-featureflagservice
     container_name: feature-flag-service
-      #    build:
-      #context: ./src/featureflagservice
+      build:
+        context: ./src/featureflagservice
     ports:
       - "${FEATURE_FLAG_SERVICE_PORT}:${FEATURE_FLAG_SERVICE_PORT}"
       - "${FEATURE_FLAG_GRPC_SERVICE_PORT}"
