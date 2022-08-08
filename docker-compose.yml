@@ -39,7 +39,7 @@ services:
     restart: on-failure
     command: [ "--config=/etc/otelcol-config.yml" ]
     volumes:
-      - ./src/otelcollector/otelcol-config.yml:/etc/otelcol-config.yml
+      - ./src/otelcollector/otelcol-config.yml:/etc/otelcol-config.yml:Z
     ports:
       - "4317"
       - "4318"
@@ -74,7 +74,7 @@ services:
       NODE_NAME: log-container
       FLUENTD_ARGS: --no-supervisor -q -vv
     volumes:
-      - ./src/fluentd/config/fluent.conf:/etc/fluent/fluent.conf:ro
+      - ./src/fluentd/config/fluent.conf:/etc/fluent/fluent.conf:Z
     ports:
       - 24224:24224
       - 24224:24224/udp
@@ -197,8 +197,8 @@ services:
   emailservice:
     image: ${IMAGE_NAME}:${IMAGE_VERSION}-emailservice
     container_name: email-service
-    build:
-      context: ./src/emailservice
+    # build:
+    #   context: ./src/emailservice
     ports:
       - "${EMAIL_SERVICE_PORT}"
     environment:
@@ -354,8 +354,8 @@ services:
   featureflagservice:
     image: ${IMAGE_NAME}:${IMAGE_VERSION}-featureflagservice
     container_name: feature-flag-service
-      build:
-        context: ./src/featureflagservice
+      #    build:
+      #context: ./src/featureflagservice
     ports:
       - "${FEATURE_FLAG_SERVICE_PORT}:${FEATURE_FLAG_SERVICE_PORT}"
       - "${FEATURE_FLAG_GRPC_SERVICE_PORT}"
@@ -424,7 +424,7 @@ services:
       - --web.enable-lifecycle
       - --web.route-prefix=/
     volumes:
-      - ./src/prometheus/prometheus-config.yaml:/etc/prometheus/prometheus-config.yaml
+      - ./src/prometheus/prometheus-config.yaml:/etc/prometheus/prometheus-config.yaml:Z
     ports:
       - "${PROMETHEUS_SERVICE_PORT}:${PROMETHEUS_SERVICE_PORT}"
 
@@ -433,7 +433,7 @@ services:
     image: grafana/grafana:9.0.1
     container_name: grafana
     volumes:
-      - ./src/grafana/grafana.ini:/etc/grafana/grafana.ini
-      - ./src/grafana/provisioning/:/etc/grafana/provisioning/
+      - ./src/grafana/grafana.ini:/etc/grafana/grafana.ini:Z
+      - ./src/grafana/provisioning/:/etc/grafana/provisioning/:Z
     ports:
       - "${GRAFANA_SERVICE_PORT}:${GRAFANA_SERVICE_PORT}"
